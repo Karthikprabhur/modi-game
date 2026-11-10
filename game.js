@@ -1,32 +1,50 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const startOverlay = document.getElementById("startOverlay");
 
-// --- 1. Images ---
+// --- 1. Load Images with Robust Load Tracking ---
+let modiLoaded = false;
+let rahulLoaded = false;
+
 const playerImg = new Image();
-playerImg.src = "modi.png";
+playerImg.src = "./modi.png";
+playerImg.onload = () => { modiLoaded = true; };
+playerImg.onerror = () => { console.warn("modi.png not found or could not load."); };
 
 const obstacleImg = new Image();
-obstacleImg.src = "rahul.png";
+obstacleImg.src = "./rahul.png";
+obstacleImg.onload = () => { rahulLoaded = true; };
+obstacleImg.onerror = () => { console.warn("rahul.png not found or could not load."); };
 
-// --- 2. Audio ---
-const bgm = new Audio("bgm.mp3");
+// --- 2. Load Audio with Fallback Safe-Play ---
+const bgm = new Audio("./bgm.mp3");
 bgm.loop = true;
-bgm.volume = 0.4;
+bgm.volume = 0.45;
 
-const soundGameOver = new Audio("bye.mp3");
-const soundPass = new Audio("hato.mp3");
+const soundGameOver = new Audio("./bye.mp3");
+const soundPass = new Audio("./hato.mp3");
+
+let audioUnlocked = false;
 
 function playSound(audio) {
+  if (!audioUnlocked) return;
   audio.currentTime = 0;
-  audio.play().catch(() => {});
+  audio.play().catch(e => console.warn("Sound play suppressed:", e));
 }
+
+// Start overlay to legally unlock browser audio
+startOverlay.addEventListener("click", () => {
+  audioUnlocked = true;
+  startOverlay.style.display = "none";
+  bgm.play().catch(e => console.warn("Autoplay blocked:", e));
+  handleAction();
+});
 
 // --- 3. State Variables ---
 let gameOver = false;
 let score = 0;
 let highScore = localStorage.getItem("vikas_high_score") || 0;
 let frameCount = 0;
-let bgmStarted = false;
 
 let baseSpeed = 6;
 let currentSpeed = baseSpeed;
@@ -34,7 +52,7 @@ let currentSpeed = baseSpeed;
 const groundHeight = 40;
 const groundY = canvas.height - groundHeight - 55;
 
-// Player
+// Player Setup
 const player = {
   x: 60,
   y: groundY,
@@ -47,22 +65,23 @@ const player = {
   isJumping: false
 };
 
-// Clouds (scenery)
+// Clouds
 const clouds = [
-  { x: 100, y: 40, size: 30, speed: 1.2 },
+  { x: 100, y: 40, size: 28, speed: 1.2 },
   { x: 350, y: 70, size: 22, speed: 0.8 },
-  { x: 650, y: 35, size: 28, speed: 1.0 }
+  { x: 650, y: 35, size: 26, speed: 1.0 }
 ];
 
 // Obstacles
 let obstacles = [];
 const spawnInterval = 110;
 
-// Universal Jump/Start Handler (Keyboard & Mobile Touch)
+// Universal Action Trigger
 function handleAction() {
-  if (!bgmStarted) {
+  if (!audioUnlocked) {
+    audioUnlocked = true;
+    startOverlay.style.display = "none";
     bgm.play().catch(() => {});
-    bgmStarted = true;
   }
 
   if (gameOver) {
@@ -73,21 +92,20 @@ function handleAction() {
   }
 }
 
-// Keyboard
-window.addEventListener("keydown", function(e) {
+// Controls
+window.addEventListener("keydown", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp") {
     e.preventDefault();
     handleAction();
   }
 });
 
-// Touch / Mouse Tap (for mobile screens and clicking)
-canvas.addEventListener("touchstart", function(e) {
+canvas.addEventListener("touchstart", (e) => {
   e.preventDefault();
   handleAction();
 }, { passive: false });
 
-canvas.addEventListener("mousedown", function() {
+canvas.addEventListener("mousedown", () => {
   handleAction();
 });
 
@@ -106,9 +124,9 @@ function restartGame() {
   bgm.play().catch(() => {});
 }
 
-// Collision Check
+// Bounding Box Collision
 function checkCollision(p, obs) {
-  const pad = 8;
+  const pad = 6;
   return (
     p.x + pad < obs.x + obs.width - pad &&
     p.x + p.width - pad > obs.x + pad &&
@@ -117,7 +135,7 @@ function checkCollision(p, obs) {
   );
 }
 
-// --- 4. Update ---
+// --- 4. Physics & State Loop ---
 function update() {
   if (gameOver) return;
 
@@ -143,9 +161,9 @@ function update() {
     player.isJumping = false;
   }
 
-  // Spawn Rahul
+  // Spawn obstacles
   if (frameCount % spawnInterval === 0) {
-    const obsHeight = 52 + Math.floor(Math.random() * 15);
+    const obsHeight = 52 + Math.floor(Math.random() * 14);
     obstacles.push({
       x: canvas.width,
       y: canvas.height - groundHeight - obsHeight,
@@ -171,7 +189,7 @@ function update() {
     }
   }
 
-  // Clear passed hurdles & award score
+  // Score points & play pass sound
   while (obstacles.length > 0 && obstacles[0].x + obstacles[0].width < 0) {
     obstacles.shift();
     score += 10;
@@ -179,11 +197,11 @@ function update() {
   }
 }
 
-// --- 5. Draw ---
+// --- 5. Render Routine ---
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw Clouds
+  // Clouds
   ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
   for (let c of clouds) {
     ctx.beginPath();
@@ -197,33 +215,45 @@ function draw() {
   ctx.fillStyle = "#4a6b22";
   ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
 
-  // Player
-  if (playerImg.complete && playerImg.naturalWidth > 0) {
+  // Draw Player
+  if (modiLoaded && playerImg.complete) {
     ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
   } else {
+    // Stylized Saffron Avatar with label
     ctx.fillStyle = "#FF9933";
     ctx.fillRect(player.x, player.y, player.width, player.height);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(player.x + 8, player.y + 12, player.width - 16, player.height - 18);
+    ctx.fillStyle = "#000";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("MODI", player.x + 8, player.y + 32);
   }
 
-  // Obstacles
+  // Draw Obstacles
   for (let obs of obstacles) {
-    if (obstacleImg.complete && obstacleImg.naturalWidth > 0) {
+    if (rahulLoaded && obstacleImg.complete) {
       ctx.drawImage(obstacleImg, obs.x, obs.y, obs.width, obs.height);
     } else {
-      ctx.fillStyle = "#8B0000";
+      // Crimson barrier with label
+      ctx.fillStyle = "#B22222";
       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      ctx.fillStyle = "#FFD700";
+      ctx.fillRect(obs.x, obs.y, obs.width, 5);
+      ctx.fillStyle = "#FFF";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText("RAHUL", obs.x + 4, obs.y + 28);
     }
   }
 
-  // Score UI
+  // Score HUD
   ctx.fillStyle = "#1e1e24";
   ctx.font = "bold 18px monospace";
   ctx.fillText("Score: " + score, 20, 30);
   ctx.fillText("High: " + highScore, 20, 52);
 
-  // Game Over Screen
+  // Game Over
   if (gameOver) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.78)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = "#FFD700";
@@ -239,6 +269,7 @@ function draw() {
   }
 }
 
+// Game Loop
 function gameLoop() {
   update();
   draw();
