@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Vikas Runner</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #18181b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      touch-action: manipulation;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 26px;
+      letter-spacing: 1px;
+    }
+    canvas {
+      background: #7ec8e3;
+      border: 3px solid #27272a;
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+      max-width: 95vw;
+      height: auto;
+    }
+    p {
+      margin-top: 12px;
+      color: #a1a1aa;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Vikas Runner</h1>
+  <canvas id="gameCanvas" width="800" height="300"></canvas>
+  <p>Tap Screen or Press <b>SPACE</b> to Jump</p>
+
+  <script src="game.js"></script>
+</body>
+</html>
