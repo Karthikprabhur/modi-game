@@ -2,21 +2,19 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const startOverlay = document.getElementById("startOverlay");
 
-// --- 1. Load Images with Robust Load Tracking ---
+// --- 1. Images ---
 let modiLoaded = false;
 let rahulLoaded = false;
 
 const playerImg = new Image();
 playerImg.src = "./modi.png";
 playerImg.onload = () => { modiLoaded = true; };
-playerImg.onerror = () => { console.warn("modi.png not found or could not load."); };
 
 const obstacleImg = new Image();
 obstacleImg.src = "./rahul.png";
 obstacleImg.onload = () => { rahulLoaded = true; };
-obstacleImg.onerror = () => { console.warn("rahul.png not found or could not load."); };
 
-// --- 2. Load Audio with Fallback Safe-Play ---
+// --- 2. Audio ---
 const bgm = new Audio("./bgm.mp3");
 bgm.loop = true;
 bgm.volume = 0.45;
@@ -29,58 +27,62 @@ let audioUnlocked = false;
 function playSound(audio) {
   if (!audioUnlocked) return;
   audio.currentTime = 0;
-  audio.play().catch(e => console.warn("Sound play suppressed:", e));
+  audio.play().catch(() => {});
 }
 
-// Start overlay to legally unlock browser audio
-startOverlay.addEventListener("click", () => {
-  audioUnlocked = true;
-  startOverlay.style.display = "none";
-  bgm.play().catch(e => console.warn("Autoplay blocked:", e));
-  handleAction();
-});
+// Request real mobile fullscreen mode
+function requestFullScreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen().catch(() => {});
+  } else if (elem.webkitRequestFullscreen) {
+    elem.webkitRequestFullscreen();
+  }
+}
 
-// --- 3. State Variables ---
+// --- 3. Tuned Physics & Slower Speed Settings ---
 let gameOver = false;
 let score = 0;
 let highScore = localStorage.getItem("vikas_high_score") || 0;
 let frameCount = 0;
 
-let baseSpeed = 6;
+// Slower pacing: reduced from 6 -> 3.8
+const baseSpeed = 3.8;
 let currentSpeed = baseSpeed;
 
-const groundHeight = 40;
-const groundY = canvas.height - groundHeight - 55;
+const groundHeight = 50;
+const groundY = canvas.height - groundHeight - 60;
 
-// Player Setup
+// Player: gentler gravity and jump arc for easy reaction
 const player = {
-  x: 60,
+  x: 70,
   y: groundY,
-  width: 50,
-  height: 55,
+  width: 52,
+  height: 60,
   vy: 0,
-  gravity: 0.85,
-  jumpStrength: -14,
+  gravity: 0.65,        // Reduced from 0.85 (floats longer)
+  jumpStrength: -12.5,  // Smooth, high jump
   groundY: groundY,
   isJumping: false
 };
 
 // Clouds
 const clouds = [
-  { x: 100, y: 40, size: 28, speed: 1.2 },
-  { x: 350, y: 70, size: 22, speed: 0.8 },
-  { x: 650, y: 35, size: 26, speed: 1.0 }
+  { x: 120, y: 50, size: 28, speed: 0.8 },
+  { x: 420, y: 80, size: 22, speed: 0.5 },
+  { x: 700, y: 40, size: 26, speed: 0.7 }
 ];
 
-// Obstacles
+// Obstacles: increased interval so obstacles spawn farther apart
 let obstacles = [];
-const spawnInterval = 110;
+const spawnInterval = 145; // Slower spawn rhythm (was 110)
 
-// Universal Action Trigger
+// Universal Action Trigger (Mobile Tap & Keyboard)
 function handleAction() {
   if (!audioUnlocked) {
     audioUnlocked = true;
     startOverlay.style.display = "none";
+    requestFullScreen();
     bgm.play().catch(() => {});
   }
 
@@ -109,6 +111,10 @@ canvas.addEventListener("mousedown", () => {
   handleAction();
 });
 
+startOverlay.addEventListener("click", () => {
+  handleAction();
+});
+
 // Restart Game
 function restartGame() {
   obstacles = [];
@@ -124,9 +130,9 @@ function restartGame() {
   bgm.play().catch(() => {});
 }
 
-// Bounding Box Collision
+// Forgiving Collision Box
 function checkCollision(p, obs) {
-  const pad = 6;
+  const pad = 10; // extra padding so hitboxes are lenient
   return (
     p.x + pad < obs.x + obs.width - pad &&
     p.x + p.width - pad > obs.x + pad &&
@@ -135,23 +141,24 @@ function checkCollision(p, obs) {
   );
 }
 
-// --- 4. Physics & State Loop ---
+// --- 4. Update Loop ---
 function update() {
   if (gameOver) return;
 
   frameCount++;
-  currentSpeed = baseSpeed + Math.floor(score / 50) * 0.8;
+  // Very slow gradual increase
+  currentSpeed = baseSpeed + Math.floor(score / 80) * 0.4;
 
   // Move clouds
   for (let c of clouds) {
     c.x -= c.speed;
     if (c.x + c.size * 3 < 0) {
-      c.x = canvas.width + 50;
-      c.y = 20 + Math.random() * 80;
+      c.x = canvas.width + 60;
+      c.y = 30 + Math.random() * 90;
     }
   }
 
-  // Jump physics
+  // Player gravity
   player.vy += player.gravity;
   player.y += player.vy;
 
@@ -161,18 +168,18 @@ function update() {
     player.isJumping = false;
   }
 
-  // Spawn obstacles
+  // Spawn obstacles with plenty of spacing
   if (frameCount % spawnInterval === 0) {
-    const obsHeight = 52 + Math.floor(Math.random() * 14);
+    const obsHeight = 55 + Math.floor(Math.random() * 15);
     obstacles.push({
       x: canvas.width,
       y: canvas.height - groundHeight - obsHeight,
-      width: 45,
+      width: 48,
       height: obsHeight
     });
   }
 
-  // Move hurdles & check hits
+  // Move obstacles
   for (let i = 0; i < obstacles.length; i++) {
     const obs = obstacles[i];
     obs.x -= currentSpeed;
@@ -189,7 +196,7 @@ function update() {
     }
   }
 
-  // Score points & play pass sound
+  // Clear passed hurdles
   while (obstacles.length > 0 && obstacles[0].x + obstacles[0].width < 0) {
     obstacles.shift();
     score += 10;
@@ -212,64 +219,57 @@ function draw() {
   }
 
   // Ground
-  ctx.fillStyle = "#4a6b22";
+  ctx.fillStyle = "#3e5d1a";
   ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
 
-  // Draw Player
+  // Player (Modi)
   if (modiLoaded && playerImg.complete) {
     ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
   } else {
-    // Stylized Saffron Avatar with label
     ctx.fillStyle = "#FF9933";
     ctx.fillRect(player.x, player.y, player.width, player.height);
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(player.x + 8, player.y + 12, player.width - 16, player.height - 18);
     ctx.fillStyle = "#000";
-    ctx.font = "bold 11px sans-serif";
-    ctx.fillText("MODI", player.x + 8, player.y + 32);
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("MODI", player.x + 8, player.y + 35);
   }
 
-  // Draw Obstacles
+  // Obstacles (Rahul)
   for (let obs of obstacles) {
     if (rahulLoaded && obstacleImg.complete) {
       ctx.drawImage(obstacleImg, obs.x, obs.y, obs.width, obs.height);
     } else {
-      // Crimson barrier with label
       ctx.fillStyle = "#B22222";
       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      ctx.fillStyle = "#FFD700";
-      ctx.fillRect(obs.x, obs.y, obs.width, 5);
       ctx.fillStyle = "#FFF";
-      ctx.font = "bold 10px sans-serif";
-      ctx.fillText("RAHUL", obs.x + 4, obs.y + 28);
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText("RAHUL", obs.x + 4, obs.y + 30);
     }
   }
 
   // Score HUD
   ctx.fillStyle = "#1e1e24";
-  ctx.font = "bold 18px monospace";
-  ctx.fillText("Score: " + score, 20, 30);
-  ctx.fillText("High: " + highScore, 20, 52);
+  ctx.font = "bold 20px monospace";
+  ctx.fillText("Score: " + score, 24, 34);
+  ctx.fillText("High: " + highScore, 24, 58);
 
-  // Game Over
+  // Game Over Screen
   if (gameOver) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = "#FFD700";
-    ctx.font = "bold 30px sans-serif";
+    ctx.font = "bold 32px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("KHATAM! TATA! BYE-BYE!", canvas.width / 2, canvas.height / 2 - 20);
 
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "18px sans-serif";
     ctx.fillText("Score: " + score + "  |  Best: " + highScore, canvas.width / 2, canvas.height / 2 + 18);
-    ctx.fillText("Tap Screen or Press SPACE to Restart", canvas.width / 2, canvas.height / 2 + 55);
+    ctx.fillText("Tap to Try Again", canvas.width / 2, canvas.height / 2 + 55);
     ctx.textAlign = "left";
   }
 }
 
-// Game Loop
 function gameLoop() {
   update();
   draw();
